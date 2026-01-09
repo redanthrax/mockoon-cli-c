@@ -31,9 +31,12 @@ static json_t* create_mockoon_route_from_openapi_path(
   json_t *route = json_object();
 
   json_object_set_new(route, "uuid", json_string(path));
-  json_object_set_new(route, "path", json_string(path));
+  json_object_set_new(route, "type", json_string("http"));
+  json_object_set_new(route, "documentation", json_string(""));
   json_object_set_new(route, "method", json_string(method));
-  json_object_set_new(route, "disabled", json_false());
+  json_object_set_new(route, "endpoint", json_string(path));
+  json_object_set_new(route, "enabled", json_true());
+  json_object_set_new(route, "responseMode", json_null());
 
   json_t *responses = json_object_get(operation, "responses");
   int status_code = 200;
@@ -44,8 +47,23 @@ static json_t* create_mockoon_route_from_openapi_path(
 
     json_object_foreach(responses, key, resp) {
       if (key) {
-        status_code = atoi(key);
-        break;
+        if (strcmp(key, "2XX") == 0 || strcmp(key, "200") == 0 ||
+            strcmp(key, "201") == 0) {
+          status_code = 200;
+          break;
+        } else if (key[0] == '2' && key[1] == '0') {
+          status_code = atoi(key);
+          break;
+        } else if (strcmp(key, "4XX") == 0) {
+          status_code = 400;
+        } else if (strcmp(key, "5XX") == 0) {
+          status_code = 500;
+        } else {
+          int code = atoi(key);
+          if (code >= 200 && code < 600 && status_code == 200) {
+            status_code = code;
+          }
+        }
       }
     }
   }
@@ -55,10 +73,22 @@ static json_t* create_mockoon_route_from_openapi_path(
 
   json_object_set_new(mock_response, "uuid",
                       json_string("default-response"));
+  json_object_set_new(mock_response, "label", json_string(""));
   json_object_set_new(mock_response, "statusCode",
                       json_integer(status_code));
+  json_object_set_new(mock_response, "latency", json_integer(0));
+  json_object_set_new(mock_response, "bodyType", json_string("INLINE"));
+  json_object_set_new(mock_response, "filePath", json_string(""));
+  json_object_set_new(mock_response, "databucketID", json_string(""));
+  json_object_set_new(mock_response, "sendFileAsBody", json_false());
   json_object_set_new(mock_response, "body", json_string("{}"));
   json_object_set_new(mock_response, "headers", json_array());
+  json_object_set_new(mock_response, "rules", json_array());
+  json_object_set_new(mock_response, "rulesOperator", json_string("OR"));
+  json_object_set_new(mock_response, "disableTemplating", json_false());
+  json_object_set_new(mock_response, "fallbackTo404", json_false());
+  json_object_set_new(mock_response, "default", json_true());
+  json_object_set_new(mock_response, "crudKey", json_string("id"));
 
   json_array_append(route_responses, mock_response);
   json_decref(mock_response);
@@ -97,7 +127,7 @@ openapi_result_t openapi_convert_to_environment(
   (*env)->name = strdup(json_string_value(title));
   (*env)->port = 3000;
   (*env)->proxy_mode = false;
-  (*env)->last_migration = 0;
+  (*env)->last_migration = 32;
 
   json_t *paths = json_object_get(openapi_json, "paths");
   json_t *routes = json_array();

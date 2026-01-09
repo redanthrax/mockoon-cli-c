@@ -164,37 +164,88 @@ json_t* json_environment_to_json(environment_t *env) {
 
   json_t *obj = json_object();
 
+  json_object_set_new(obj, "uuid", json_string("imported-api"));
+  json_object_set_new(obj, "lastMigration", json_integer(env->last_migration));
+
   if (env->name) {
     json_object_set_new(obj, "name", json_string(env->name));
   }
 
+  json_object_set_new(obj, "endpointPrefix", json_string(""));
+  json_object_set_new(obj, "latency", json_integer(0));
   json_object_set_new(obj, "port", json_integer(env->port));
 
   if (env->hostname && env->hostname_len > 0) {
     json_object_set_new(obj, "hostname", json_string(env->hostname[0]));
+  } else {
+    json_object_set_new(obj, "hostname", json_string("0.0.0.0"));
   }
 
-  json_object_set_new(obj, "proxyMode", json_boolean(env->proxy_mode));
-  json_object_set_new(obj, "lastMigration", json_integer(env->last_migration));
+  json_object_set_new(obj, "folders", json_array());
 
   if (env->routes) {
     json_object_set(obj, "routes", env->routes);
+  } else {
+    json_object_set_new(obj, "routes", json_array());
   }
 
-  if (env->cors_rules) {
-    json_object_set(obj, "corsRules", env->cors_rules);
+  json_t *root_children = json_array();
+  if (env->routes && json_is_array(env->routes)) {
+    size_t index;
+    json_t *route;
+    json_array_foreach(env->routes, index, route) {
+      json_t *child = json_object();
+      json_object_set_new(child, "type", json_string("route"));
+      json_t *uuid = json_object_get(route, "uuid");
+      if (uuid) {
+        json_object_set(child, "uuid", uuid);
+      }
+      json_array_append_new(root_children, child);
+    }
   }
+  json_object_set_new(obj, "rootChildren", root_children);
+
+  json_object_set_new(obj, "proxyMode", json_boolean(env->proxy_mode));
+  json_object_set_new(obj, "proxyHost", json_string(""));
+  json_object_set_new(obj, "proxyRemovePrefix", json_false());
+
+  json_t *tls_options = json_object();
+  json_object_set_new(tls_options, "enabled", json_false());
+  json_object_set_new(tls_options, "type", json_string("CERT"));
+  json_object_set_new(tls_options, "pfxPath", json_string(""));
+  json_object_set_new(tls_options, "certPath", json_string(""));
+  json_object_set_new(tls_options, "keyPath", json_string(""));
+  json_object_set_new(tls_options, "caPath", json_string(""));
+  json_object_set_new(tls_options, "passphrase", json_string(""));
+  json_object_set_new(obj, "tlsOptions", tls_options);
+
+  json_object_set_new(obj, "cors", json_true());
+
+  json_t *headers = json_array();
+  json_t *header = json_object();
+  json_object_set_new(header, "key", json_string("Content-Type"));
+  json_object_set_new(header, "value", json_string("application/json"));
+  json_array_append_new(headers, header);
+  json_object_set_new(obj, "headers", headers);
+
+  json_t *empty_headers = json_array();
+  json_t *empty_header = json_object();
+  json_object_set_new(empty_header, "key", json_string(""));
+  json_object_set_new(empty_header, "value", json_string(""));
+  json_array_append_new(empty_headers, empty_header);
+  json_object_set_new(obj, "proxyReqHeaders", json_copy(empty_headers));
+  json_object_set_new(obj, "proxyResHeaders", empty_headers);
 
   if (env->data_buckets) {
-    json_object_set(obj, "dataBuckets", env->data_buckets);
+    json_object_set(obj, "data", env->data_buckets);
+  } else {
+    json_object_set_new(obj, "data", json_array());
   }
 
   if (env->callbacks) {
     json_object_set(obj, "callbacks", env->callbacks);
-  }
-
-  if (env->variables) {
-    json_object_set(obj, "variables", env->variables);
+  } else {
+    json_object_set_new(obj, "callbacks", json_array());
   }
 
   return obj;
